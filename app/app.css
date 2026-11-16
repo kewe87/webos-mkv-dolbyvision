@@ -1,0 +1,143 @@
+/* Copyright (c) 2026 kewe87. Licensed under LGPL-2.1-or-later. */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: #10121f;
+  color: #e8e9f1;
+  font-family: "LG Smart UI", "Museo Sans", sans-serif;
+  font-size: 28px;
+  display: flex;
+  flex-direction: column;
+}
+/* main is a vertical stack; the header/intro/state/autostart blocks keep their
+   natural height, and the .columns region takes the rest and scrolls inside so
+   nothing can ever push past the bottom of the screen. */
+main {
+  padding: 34px 100px 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+header { display: flex; align-items: baseline; gap: 24px; flex: none; }
+h1 { margin: 0; font-size: 46px; font-weight: 600; }
+#version { color: #8a8ea8; font-size: 28px; }
+#subtitle { margin-top: 2px; color: #f2b33d; font-size: 25px; flex: none; }
+#intro { margin: 10px 0 20px; max-width: 1620px; color: #b9bcd2; font-size: 23px; line-height: 1.4; flex: none; }
+
+.card { background: #1b1f3b; border-radius: 16px; padding: 18px 32px; }
+
+#state { margin-bottom: 18px; border-left: 12px solid #8a8ea8; flex: none; }
+#state.ok { border-left-color: #3ccf7a; }
+#state.warn { border-left-color: #f2b33d; }
+#state.bad { border-left-color: #e5484d; }
+#state-title { font-size: 38px; font-weight: 600; }
+#state-text { margin-top: 6px; color: #b9bcd2; font-size: 25px; line-height: 1.35; }
+#message { margin: 8px 0 0; color: #f2b33d; font-size: 24px; }
+
+#autostart-opt { margin-bottom: 18px; padding: 15px 32px; flex: none; }
+.opt { display: flex; align-items: center; gap: 16px; font-size: 25px; cursor: pointer; }
+.opt input { width: 28px; height: 28px; accent-color: #f2b33d; }
+.opt input:focus { outline: 3px solid #fff; }
+.opt input:disabled { opacity: 0.4; }
+#autostart-hint { margin-top: 7px; color: #8a8ea8; font-size: 21px; line-height: 1.35; }
+
+/* the two columns fill the remaining height; the action list scrolls inside its
+   own box (buttons are focusable, so the remote scrolls them into view), and the
+   info/log card clips what does not fit (the full log is on USB / over SSH). */
+.columns { display: flex; gap: 28px; flex: 1 1 auto; min-height: 0; }
+#actions {
+  width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+}
+#actions::-webkit-scrollbar { width: 0; height: 0; }
+.columns > .card:last-child { flex: 1; min-height: 0; overflow: hidden; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: #2a2f57;
+  border: 4px solid transparent;
+  border-radius: 12px;
+  padding: 9px 22px;
+  text-align: left;
+  flex: none;
+}
+button:focus { outline: none; border-color: #fff; background: #3a4180; }
+button.danger:focus { background: #7a2a2d; }
+button:disabled { opacity: 0.4; }
+
+table { border-collapse: collapse; width: 100%; font-size: 24px; }
+td { padding: 6px 0; vertical-align: top; }
+td:first-child { color: #8a8ea8; width: 320px; padding-right: 20px; }
+td.mono { font-family: monospace; font-size: 21px; word-break: break-all; }
+
+#log {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+#dialog {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#dialog[hidden] { display: none; }
+#dialog .card { width: 1200px; line-height: 1.45; }
+#dialog .row { display: flex; gap: 24px; margin-top: 30px; }
+
+#diag {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#diag[hidden] { display: none; }
+#diag .card { width: 1400px; max-height: 1000px; overflow: hidden; line-height: 1.4; }
+#diag-head { font-size: 40px; font-weight: 600; margin-bottom: 24px; }
+#diag-body { display: flex; gap: 44px; align-items: flex-start; }
+#diag-qr {
+  flex: none;
+  width: 496px; height: 496px;
+  background: #fff;
+  padding: 18px;
+  border-radius: 12px;
+}
+#diag-qr[hidden] { display: none; }
+#diag-qr img, #diag-qr canvas, #diag-qr svg {
+  width: 460px !important; height: 460px !important; display: block;
+}
+.diag-info { flex: 1; min-width: 0; }
+#diag-intro { margin: 0 0 16px; color: #b9bcd2; font-size: 24px; word-break: break-all; }
+#diag-usb { margin: 0 0 16px; color: #3ccf7a; font-size: 24px; word-break: break-all; }
+#diag-usb[hidden] { display: none; }
+#diag-summary { margin: 0; font-size: 22px; white-space: pre-wrap; word-break: break-word; color: #e8e9f1; }
+#diag-note { color: #f2b33d; font-size: 22px; }
+#diag .row { display: flex; gap: 24px; margin-top: 24px; }
+
+footer {
+  flex: none;
+  padding: 12px 100px 20px;
+  color: #5d6180;
+  font-size: 21px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
