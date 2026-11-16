@@ -34,7 +34,7 @@ CFLAGS_GST="-I$SRC -I$HERE -I$S/usr/include/gstreamer-1.0 -I$S/usr/include/glib-
  -Wmissing-declarations -Wno-multichar -Wpointer-arith -Wmissing-prototypes -Wdeclaration-after-statement \
  -feliminate-unused-debug-types -fPIC -pthread -DHAVE_CONFIG_H"
 
-for f in ebml-read ebml-write matroska matroska-demux matroska-parse matroska-ids matroska-mux matroska-read-common webm-mux lzo; do
+for f in ebml-read ebml-write matroska matroska-demux matroska-parse matroska-ids matroska-mux matroska-read-common webm-mux lzo glibc-compat; do
   $CC $CFLAGS_GST -c "$SRC/$f.c" -o "$OBJ/$f.o"
 done
 
