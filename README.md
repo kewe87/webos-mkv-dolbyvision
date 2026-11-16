@@ -224,7 +224,12 @@ The video caps must contain `dolby-vision=(boolean)true, dolby-vision-profile=(i
    build/build-libdovi.sh      # libdovi as a static library (pinned commit)
    build/build.sh              # -> out/libgstmatroska.so  (primary: webOS 22)
    build/package.py            # -> out/release/ (.so, tv-scripts, .ipk, manifest, SHA256SUMS)
+   build/preflight.sh <so> <target-sysroot> [libc-sysroot]   # off-device load check (qemu-user)
    ```
+
+   `build/preflight.sh` `dlopen`s a built plugin under qemu-user against a sysroot of the target TV, so a
+   glibc-version or ABI mismatch (the kind that makes the TV say "check failed") shows up on the PC before
+   anyone installs it. Run it for each variant before a release.
 
    The package bundles one plugin per webOS variant and picks the right one on the TV by GStreamer
    version. Additional variants are built the same way against that version's LG source package and
