@@ -191,6 +191,9 @@ diag_dump() {
     retr="no USB stick found - copy $DIAG off via SSH, or insert a FAT32/exFAT USB stick and open the log again to save it there"
   fi
 
+  # who currently overlays the demuxer (our app, Overlay Studio, something else)
+  ovsrc=$(grep " $TARGET " /proc/self/mountinfo 2>/dev/null | awk '{print $4}' | head -1)
+
   {
     echo "== MKV Dolby Vision - diagnostic log =="
     echo ">> $retr"
@@ -207,16 +210,22 @@ diag_dump() {
     echo "[state]  overlayActive=$(mounted && echo yes || echo no)  inUse=$(in_use && echo yes || echo no)"
     echo "[check]  result=$chkr"
     echo
-    echo "---- compatibility check: gst-inspect matroskademux (isolated) ----"
-    printf '%s\n' "$CHECK_OUT"
-    echo
-    echo "---- loader debug (GST_DEBUG=3, isolated) ----"
-    printf '%s\n' "$CHECK_DBG"
+    if [ "$chkr" = PASS ]; then
+      echo "---- compatibility check: plugin loads OK ----"
+      printf '%s\n' "$CHECK_OUT" | sed -n 's/^  Version *\(.*\)/matroskademux reports version \1/p' | head -1
+    else
+      echo "---- compatibility check FAILED: gst-inspect matroskademux (isolated) ----"
+      printf '%s\n' "$CHECK_OUT"
+      echo
+      echo "---- loader debug (GST_DEBUG=3) ----"
+      printf '%s\n' "$CHECK_DBG"
+    fi
     echo
     echo "---- environment ----"
     echo "uname:   $(uname -srvm 2>/dev/null)"
     echo "target:  $TARGET  size=$(wc -c < "$TARGET" 2>/dev/null) bytes"
     echo "overlay: $(mounted && echo 'bind-mounted (active)' || echo 'not mounted')"
+    echo "overlay-source: ${ovsrc:-<none>}"
     echo "mem:     $(awk '/^MemTotal|^MemAvailable/{printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
   } > "$DIAG" 2>/dev/null
 

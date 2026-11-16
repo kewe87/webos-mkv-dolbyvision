@@ -54,6 +54,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <time.h>
 #include <glib/gprintf.h>
 
 #include <gst/base/base.h>
@@ -294,10 +295,19 @@ matroska_dv_log (const gchar * format, ...)
 {
   FILE *f;
   va_list args;
+  time_t t;
+  struct tm tmv;
+  char ts[24];
 
   f = fopen (MATROSKA_DV_LOG, "a");
   if (f == NULL)
     return;
+
+  /* timestamp every line, so separate playbacks can be told apart */
+  t = time (NULL);
+  if (localtime_r (&t, &tmv) != NULL
+      && strftime (ts, sizeof ts, "%Y-%m-%d %H:%M:%S", &tmv) > 0)
+    fprintf (f, "%s  ", ts);
 
   va_start (args, format);
   vfprintf (f, format, args);
@@ -8860,6 +8870,8 @@ gst_matroska_demux_prepare_dolby_track (GstMatroskaDemux * demux,
   const gchar *decision = NULL;
   gint caps_profile = demux->dv_profile;
   gchar *caps_str;
+  GstCaps *log_caps;
+  gchar *log_caps_str;
 
   /* The TV supports Dolby Vision; assume so if the smart property
    * could not be queried. */
@@ -8901,7 +8913,14 @@ gst_matroska_demux_prepare_dolby_track (GstMatroskaDemux * demux,
   matroska_dv_log ("decision profile=%d.%d support=%d known=%d: %s",
       demux->dv_profile, demux->dv_bl_signal_comp_id, support,
       demux->dolby_vision_support_known, decision);
-  matroska_dv_log ("caps %s", caps_str);
+  /* log the caps without the large codec_data blob: only the Dolby Vision
+   * fields matter here, the full hvcC just bloats the log */
+  log_caps = gst_caps_copy (context->caps);
+  gst_structure_remove_field (gst_caps_get_structure (log_caps, 0), "codec_data");
+  log_caps_str = gst_caps_to_string (log_caps);
+  matroska_dv_log ("caps %s", log_caps_str);
+  g_free (log_caps_str);
+  gst_caps_unref (log_caps);
   g_free (caps_str);
 }
 #endif
