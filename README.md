@@ -4,7 +4,7 @@ System-wide **Dolby Vision playback from MKV files** on rooted LG TVs:
 Emby, Plex, the LG media player, USB, DLNA – every app that uses LG's media pipeline.
 Optionally converts **Dolby Vision profile 7** (UHD Blu-ray remuxes) to **profile 8.1** on the fly.
 
-Fully tested on **webOS 22**; **experimental builds for webOS 6 (2021, LG C1) and webOS 5 (2020)** are
+Tested on **webOS 22** and **webOS 6 (2021, LG C1)**; an **experimental build for webOS 5 (2020)** is
 also bundled. The app picks the right one for your TV automatically, by GStreamer version
 (see *Supported TVs* below).
 
@@ -19,14 +19,13 @@ It comes with **MKV Dolby Vision Patcher**, a Homebrew Channel app to switch it 
 > the patched demuxer is put over a system file with a bind mount and started by a Homebrew Channel
 > boot script. It does **not** work on non-rooted TVs.
 
-> **Status: beta.** Fully tested on one TV: LG 86QNED916QE (board K8HP), webOS 22, firmware 04.60.91.
-> Profile 8.1 works (Dolby Vision logo in Emby). Profile 7 → 8.1 has been verified with dovi_tool test
-> data and a synthetic clip, but **not yet with a real UHD Blu-ray remux**.
+> **Status: beta.** Confirmed on **webOS 22** (LG 86QNED916QE, firmware 04.60.91) and **webOS 6**
+> (LG C1): on the C1, a real Dolby Vision **profile 7** (UHD Blu-ray) MKV that always played as HDR10 now
+> plays as Dolby Vision — the profile 7 → 8.1 conversion working on real hardware, not just test data.
 >
-> Additional builds for **webOS 6 (LG C1, GStreamer 1.16.2)** and **webOS 5 (2020 line-up, GStreamer
-> 1.14.4)** are included but are **experimental**: they were cross-compiled against LG's own source for
-> that version and statically verified, but have **not been confirmed on real hardware**. The app marks
-> them as experimental; if anything is wrong it falls back to HDR10.
+> The **webOS 5 (2020 line-up, GStreamer 1.14.4)** build is also bundled but is still **experimental**: it
+> was cross-compiled against LG's own source and load-checked off-device (qemu-user), but has not yet been
+> confirmed on a real webOS 5 TV. The app flags it; if anything is wrong it falls back to HDR10.
 
 > **Disclaimer: use at your own risk.** This is an unofficial community project, not affiliated with
 > or endorsed by LG or Dolby. It changes how your TV's system player works and requires root access.
@@ -42,13 +41,13 @@ across TV models of the same webOS major – and picks the right one automatical
 | webOS | Year / examples | GStreamer | Status |
 |---|---|---|---|
 | **webOS 22** | 2022 (e.g. C2 / G2 / QNED) | 1.18.2 | **verified** |
-| webOS 6 | 2021 (e.g. LG C1) | 1.16.2 | experimental |
+| webOS 6 | 2021 (e.g. LG C1) | 1.16.2 | **verified** |
 | webOS 5 | 2020 (OLED CX / GX / BX, premium NanoCell) | 1.14.4 | experimental |
 
 Support is tracked per GStreamer version, so once a version is confirmed on one real TV it applies to
-every TV on that version. The **experimental** builds were cross-compiled against LG's own source for
-that version and statically verified, but are **not yet confirmed on real hardware** – the app flags them
-and falls back to HDR10 if anything is off, and the RAM-only overlay is cleared by a reboot. A TV whose
+every TV on that version. The **webOS 5** build was cross-compiled against LG's own source and load-checked
+off-device, but is **not yet confirmed on real hardware** – the app flags it and falls back to HDR10 if
+anything is off, and the RAM-only overlay is cleared by a reboot. A TV whose
 GStreamer version has no bundled build needs one compiled from LG's matching source package (the app's
 **Diagnostics** button prepares the request).
 
@@ -107,7 +106,7 @@ LG fixed this only in webOS 25.
   cold boot clears it, which is exactly when autostart re-applies it.)
 - **Right build per version:** the plugin is chosen by the TV's **GStreamer version** – the ABI it binds
   to, identical across TV models of the same webOS major – listed in `tv/variants.tab`. A version
-  confirmed on real hardware is `verified`; an unverified build (e.g. webOS 6/C1) is flagged experimental
+  confirmed on real hardware is `verified`; an unverified build (e.g. webOS 5) is flagged experimental
   in the app. Before overlaying, an unverified build or a never-seen original is first loaded in an
   **isolated GStreamer instance** and only activated if that passes.
 - **Runtime guard:** the boot script re-activates only when the current LG original is exactly the one
@@ -233,8 +232,8 @@ The video caps must contain `dolby-vision=(boolean)true, dolby-vision-profile=(i
 
    The package bundles one plugin per webOS variant and picks the right one on the TV by GStreamer
    version. Additional variants are built the same way against that version's LG source package and
-   placed at `out/plugins/<variant>/libgstmatroska.so` before `build/package.py`. The experimental
-   **webOS 6 / LG C1** build (GStreamer 1.16.2, LG package "webOS 6.0 ON 1.0") and the experimental
+   placed at `out/plugins/<variant>/libgstmatroska.so` before `build/package.py`. The
+   **webOS 6 / LG C1** build (GStreamer 1.16.2, LG package "webOS 6.0 ON 1.0") and the
    **webOS 5** build (GStreamer 1.14.4, LG package "webOS 5.0 JO 1.0") use LG's own source for that
    version with the same `patches/` diff. `tv/variants.tab` records each variant's GStreamer version and
    whether it is verified on real hardware.
@@ -244,8 +243,8 @@ The video caps must contain `dolby-vision=(boolean)true, dolby-vision-profile=(i
 
 ## Limitations
 
-- **Verified on webOS 22** (GStreamer 1.18.2); **experimental webOS 6 / LG C1** (GStreamer 1.16.2) and
-  **webOS 5** (GStreamer 1.14.4) builds are bundled but not yet confirmed on real hardware. Support is
+- **Verified on webOS 22** (GStreamer 1.18.2) **and webOS 6 / LG C1** (GStreamer 1.16.2); the
+  **experimental webOS 5** (GStreamer 1.14.4) build is bundled but not yet confirmed on real hardware. Support is
   tracked per **GStreamer version**,
   so once a version is confirmed on one TV it applies to every TV on that version; a version with no
   bundled build needs one from LG's matching source package. The app's **Diagnostics** button (or
@@ -277,8 +276,8 @@ tested and reviewed on a real TV by the maintainer, who is responsible for it.
 
 ## Kurzfassung (Deutsch)
 
-Systemweites **Dolby Vision aus MKV** für gerootete LG-TVs. Voll getestet auf **webOS 22**;
-**experimentelle Builds für webOS 6 (2021, LG C1) und webOS 5 (2020)** sind mit dabei. Profil 7
+Systemweites **Dolby Vision aus MKV** für gerootete LG-TVs. Bestätigt auf **webOS 22** und
+**webOS 6 (2021, LG C1)**; ein **experimenteller Build für webOS 5 (2020)** ist dabei. Profil 7
 (UHD-Blu-ray-Remuxe) wird auf Wunsch live nach 8.1 umgewandelt.
 
 **Gepatcht wird nicht die MKV-Datei**, sondern der MKV-Baustein im Systemplayer des TVs
@@ -292,7 +291,7 @@ Systemweites **Dolby Vision aus MKV** für gerootete LG-TVs. Voll getestet auf *
 
 - **Funktionsweise:** LGs eigener Quellcode des MKV-Bausteins, ergänzt um LGs Dolby-Vision-Erkennung aus
   webOS 25. Der Baustein wird per Bind-Mount **nur im Arbeitsspeicher** über das Original gelegt. Das
-  passende Plugin wird anhand der **GStreamer-Version** gewählt (webOS 22 = verifiziert, webOS 6/C1 und
+  passende Plugin wird anhand der **GStreamer-Version** gewählt (webOS 22 und webOS 6/C1 = verifiziert,
   webOS 5 = experimentell).
 - **Bedienung:** Die Homebrew-Channel-App „GStreamer DV MKV Patcher“ (`.ipk` im Release) zeigt den
   Status und schaltet ein und aus, auf Deutsch, wenn der TV auf Deutsch steht. Sie prüft beim Start, ob
@@ -309,8 +308,8 @@ Systemweites **Dolby Vision aus MKV** für gerootete LG-TVs. Voll getestet auf *
   „Alles entfernen“.
 - **Rückgängig machen:** In der App „Ausschalten“, oder ein Neustart (ohne Autostart) stellt den
   Originalzustand her.
-- **Status:** Beta, voll getestet auf einem LG 86QNED916QE (Firmware 04.60.91); die Builds für webOS 6
-  (LG C1) und webOS 5 sind experimentell, noch nicht auf echter Hardware bestätigt.
+- **Status:** Beta, bestätigt auf einem LG 86QNED916QE (webOS 22, Firmware 04.60.91) und einem LG C1
+  (webOS 6, inkl. Profil-7→8.1 auf echtem UHD-Blu-ray-Remux); der webOS-5-Build ist noch experimentell.
 - **Hinweis:** Entwickelt mit KI-Unterstützung, getestet auf einem echten TV.
 
 **Hat's bei dir funktioniert? ⭐** Wenn der Patch dir Dolby Vision aus MKV gebracht hat, freue ich mich
