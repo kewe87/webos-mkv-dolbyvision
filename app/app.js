@@ -50,6 +50,9 @@ var TEXT = {
       'so the patch can only run until the next restart.',
     off: 'Off',
     offText: 'LG\'s original demuxer is used. MKV files play Dolby Vision as HDR10.',
+    offTextNative: 'LG\'s original demuxer is used. This webOS already plays Dolby Vision profile 5 and 8 from MKV; ' +
+      'profile 7 (UHD Blu-ray) plays as HDR10.',
+    nativeNote: 'This webOS plays profile 5/8 natively – the patch adds profile 7 → 8.1.',
     rebootOn: 'Restart required',
     rebootOnText: 'The new version becomes active after a TV restart (a video was playing).',
     rebootOff: 'Restart required',
@@ -139,6 +142,9 @@ var TEXT = {
       'webOS-Versionen gefixt), daher läuft der Patch nur bis zum nächsten Neustart.',
     off: 'Aus',
     offText: 'LGs Original wird verwendet. MKV-Dateien laufen mit Dolby Vision nur als HDR10.',
+    offTextNative: 'LGs Original wird verwendet. Dieses webOS spielt Dolby Vision Profil 5 und 8 aus MKV schon selbst; ' +
+      'Profil 7 (UHD-Blu-ray) läuft als HDR10.',
+    nativeNote: 'Dieses webOS kann Profil 5/8 schon selbst – der Patch ergänzt Profil 7 → 8.1.',
     rebootOn: 'Neustart nötig',
     rebootOnText: 'Die neue Version wird nach einem Neustart des TVs aktiv (es lief gerade ein Video).',
     rebootOff: 'Neustart nötig',
@@ -270,7 +276,8 @@ function render() {
   else if (sessionActive) setState('warn', T.activeNoPersist, T.activeNoPersistText);
   else if (s.originalKnown === 'unknown') setState('', T.unsupported, T.unsupportedText);
   else if (s.linked && !s.disabledFlag) setState('bad', T.notActivated, T.failedText + s.autostartLog);
-  else setState('', T.off, T.offText);
+  else setState('', T.off, s.nativeDv ? T.offTextNative : T.offText);
+  if (s.nativeDv && s.active) $('state-text').textContent += '  ·  ' + T.nativeNote;
   // keep the experimental-build caveat visible wherever switching on is possible
   if (s.experimental && (s.active || s.originalKnown !== 'unknown'))
     $('state-text').textContent += '  ·  ' + T.expNote;

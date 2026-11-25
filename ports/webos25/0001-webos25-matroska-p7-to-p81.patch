@@ -1,0 +1,287 @@
+diff -ruN lg-orig-1.24.0/matroska-demux.c matroska-src-1.24.0/matroska-demux.c
+--- lg-orig-1.24.0/matroska-demux.c	2026-11-25 21:15:21.210832300 +0100
++++ matroska-src-1.24.0/matroska-demux.c	2026-11-25 21:15:21.132009100 +0100
+@@ -51,6 +51,8 @@
+ 
+ #include <math.h>
+ #include <string.h>
++#include <stdio.h>
++#include <stdarg.h>
+ #include <glib/gprintf.h>
+ 
+ #include <gst/base/base.h>
+@@ -9064,6 +9066,193 @@
+   return en ? en->value_nick : NULL;
+ }
+ 
++#ifdef DOLBYHDR_SUPPORT
++#define MATROSKA_DV_LOG "/tmp/matroska-dv.log"
++
++static void
++matroska_dv_log (const gchar * format, ...)
++    G_GNUC_PRINTF (1, 2);
++
++static void
++matroska_dv_log (const gchar * format, ...)
++{
++  FILE *f;
++  va_list args;
++
++  f = fopen (MATROSKA_DV_LOG, "a");
++  if (f == NULL)
++    return;
++
++  va_start (args, format);
++  vfprintf (f, format, args);
++  va_end (args);
++  fputc ('\n', f);
++  fclose (f);
++}
++
++#endif
++
++#ifdef DOLBYHDR_P7_TO_P81
++/* libdovi C API (quietvoid/dovi_tool, crate dolby_vision, feature capi),
++ * linked statically */
++typedef struct DoviRpuOpaque DoviRpuOpaque;
++typedef struct
++{
++  const guint8 *data;
++  gsize len;
++} DoviData;
++
++extern DoviRpuOpaque *dovi_parse_unspec62_nalu (const guint8 * buf, gsize len);
++extern const gchar *dovi_rpu_get_error (const DoviRpuOpaque * ptr);
++extern gint32 dovi_convert_rpu_with_mode (DoviRpuOpaque * ptr, guint8 mode);
++extern const DoviData *dovi_write_unspec62_nalu (DoviRpuOpaque * ptr);
++extern void dovi_data_free (const DoviData * data);
++extern void dovi_rpu_free (DoviRpuOpaque * ptr);
++
++#define MATROSKA_DV_DISABLE_P7 "/media/developer/mkvdv/disable-p7"
++
++static void
++matroska_dovi_append_nal (GByteArray * arr, guint nls, const guint8 * nal,
++    gsize len)
++{
++  guint8 hdr[4];
++  guint i;
++
++  for (i = 0; i < nls; i++)
++    hdr[i] = (len >> (8 * (nls - 1 - i))) & 0xff;
++  g_byte_array_append (arr, hdr, nls);
++  g_byte_array_append (arr, nal, len);
++}
++
++/* postprocess_frame for HEVC (hvc1, length prefixed) profile 7 tracks:
++ * drops the enhancement layer (UNSPEC63 wrapper and nuh_layer_id > 0) and
++ * rewrites every RPU (UNSPEC62) to profile 8.1 like `dovi_tool -m 2`.
++ * An RPU that cannot be converted is dropped, never forwarded as profile 7.
++ * Malformed frames are passed through unchanged. */
++static GstFlowReturn
++gst_matroska_demux_dovi_p7_to_p81 (GstElement * element,
++    GstMatroskaTrackContext * stream, GstBuffer ** buf)
++{
++  GstMatroskaTrackVideoContext *vctx = (GstMatroskaTrackVideoContext *) stream;
++  guint nls = vctx->dovi_nal_length_size;
++  GstMapInfo map;
++  GByteArray *arr;
++  GstBuffer *out;
++  gsize pos = 0, out_len;
++  gboolean changed = FALSE;
++
++  if (!vctx->dovi_p7_to_p81 || nls < 1 || nls > 4)
++    return GST_FLOW_OK;
++  if (!gst_buffer_map (*buf, &map, GST_MAP_READ))
++    return GST_FLOW_OK;
++
++  arr = g_byte_array_sized_new (map.size + 64);
++
++  while (pos + nls <= map.size) {
++    guint32 nal_len = 0;
++    const guint8 *nal;
++    guint8 type, layer;
++    guint i;
++
++    for (i = 0; i < nls; i++)
++      nal_len = (nal_len << 8) | map.data[pos + i];
++    pos += nls;
++    if (nal_len < 2 || nal_len > map.size - pos)
++      goto passthrough;
++
++    nal = map.data + pos;
++    type = (nal[0] >> 1) & 0x3f;
++    layer = ((nal[0] & 0x01) << 5) | (nal[1] >> 3);
++
++    if (type == 63 || layer > 0) {
++      vctx->dovi_el_dropped++;
++      changed = TRUE;
++    } else if (type == 62) {
++      DoviRpuOpaque *rpu = dovi_parse_unspec62_nalu (nal, nal_len);
++      const DoviData *d = NULL;
++      const gchar *err = rpu ? dovi_rpu_get_error (rpu) : "no rpu";
++
++      if (err == NULL && dovi_convert_rpu_with_mode (rpu, 2) == 0) {
++        d = dovi_write_unspec62_nalu (rpu);
++        err = dovi_rpu_get_error (rpu);
++      }
++
++      if (err == NULL && d != NULL && d->data != NULL && d->len >= 2
++          && (nls == 4 || d->len < ((gsize) 1 << (8 * nls)))) {
++        matroska_dovi_append_nal (arr, nls, d->data, d->len);
++        vctx->dovi_rpu_converted++;
++      } else {
++        vctx->dovi_rpu_failed++;
++        if (vctx->dovi_rpu_failed <= 3)
++          matroska_dv_log ("p7->8.1: RPU dropped (%s)", GST_STR_NULL (err));
++      }
++
++      if (d != NULL)
++        dovi_data_free (d);
++      if (rpu != NULL)
++        dovi_rpu_free (rpu);
++      changed = TRUE;
++    } else {
++      matroska_dovi_append_nal (arr, nls, nal, nal_len);
++    }
++    pos += nal_len;
++  }
++
++  if (!changed || pos != map.size)
++    goto passthrough;
++
++  gst_buffer_unmap (*buf, &map);
++
++  out_len = arr->len;
++  out = gst_buffer_new_wrapped (g_byte_array_free (arr, FALSE), out_len);
++  gst_buffer_copy_into (out, *buf, GST_BUFFER_COPY_METADATA, 0, -1);
++  gst_buffer_unref (*buf);
++  *buf = out;
++
++  vctx->dovi_frames++;
++  if (vctx->dovi_frames == 1 || vctx->dovi_frames % 2000 == 0)
++    matroska_dv_log ("p7->8.1: frames=%" G_GUINT64_FORMAT " rpu_converted=%"
++        G_GUINT64_FORMAT " rpu_failed=%" G_GUINT64_FORMAT " el_nal_dropped=%"
++        G_GUINT64_FORMAT, vctx->dovi_frames, vctx->dovi_rpu_converted,
++        vctx->dovi_rpu_failed, vctx->dovi_el_dropped);
++  return GST_FLOW_OK;
++
++passthrough:
++  gst_buffer_unmap (*buf, &map);
++  g_byte_array_free (arr, TRUE);
++  return GST_FLOW_OK;
++}
++
++/* Sets up the conversion for an HEVC track with an hvcC codec private.
++ * Returns FALSE if the track cannot be converted. */
++static gboolean
++gst_matroska_demux_setup_dovi_p7_to_p81 (GstMatroskaDemux * demux,
++    GstMatroskaTrackContext * context)
++{
++  GstMatroskaTrackVideoContext *vctx =
++      (GstMatroskaTrackVideoContext *) context;
++  const guint8 *priv = context->codec_priv;
++  guint nls;
++
++  if (g_file_test (MATROSKA_DV_DISABLE_P7, G_FILE_TEST_EXISTS))
++    return FALSE;
++  if (g_strcmp0 (context->codec_id, GST_MATROSKA_CODEC_ID_VIDEO_MPEGH_HEVC))
++    return FALSE;
++  if (priv == NULL || context->codec_priv_size < 23 || priv[0] != 1)
++    return FALSE;
++  nls = (priv[21] & 0x03) + 1;
++  if (nls == 3)
++    return FALSE;
++  if (context->postprocess_frame != NULL)
++    return FALSE;
++
++  vctx->dovi_nal_length_size = nls;
++  vctx->dovi_p7_to_p81 = TRUE;
++  context->postprocess_frame = gst_matroska_demux_dovi_p7_to_p81;
++  return TRUE;
++}
++#endif
++
+ /* Check and set Dolby Vision */
+ #ifdef DOLBYHDR_SUPPORT
+ static gboolean
+@@ -9170,6 +9359,22 @@
+     /* FIXME: Handle as BL signal compatibility for not-certified profileID.
+      * Do not send dolby-vision signal to avoid opening with Dolby driver */
+     if (demux->dv_profile == 7) {
++#ifdef DOLBYHDR_P7_TO_P81
++      /* UHD Blu-ray (BL compatibility 6), single track: convert every RPU to
++       * profile 8.1 on the fly and signal the track as Dolby Vision 8. */
++      if (demux->dv_bl_signal_comp_id == 6
++          && !(demux->has_dolby_bl_cand && demux->has_dolby_el_cand)
++          && gst_matroska_demux_setup_dovi_p7_to_p81 (demux, context)) {
++        gst_caps_set_simple (context->caps, "dolby-vision", G_TYPE_BOOLEAN,
++            TRUE, "dolby-vision-profile", G_TYPE_INT, 8, NULL);
++        matroska_dv_log ("decision profile=7.%d support=%d: dolby-vision set, "
++            "converting profile 7 to 8.1", demux->dv_bl_signal_comp_id,
++            demux->dolby_vision_support);
++        return TRUE;
++      }
++      matroska_dv_log ("decision profile=7.%d: profile 7 is played as HDR10",
++          demux->dv_bl_signal_comp_id);
++#endif
+       GST_DEBUG_OBJECT (demux,
+           "Dolby Vision profile 7 is not supported, but can play as HDR10.");
+       return TRUE;
+@@ -9198,6 +9403,11 @@
+     }
+ 
+     /* Set as Dolby Vision */
++#ifdef DOLBYHDR_P7_TO_P81
++    matroska_dv_log ("decision profile=%d.%d support=%d: dolby-vision set "
++        "(native)", demux->dv_profile, demux->dv_bl_signal_comp_id,
++        demux->dolby_vision_support);
++#endif
+     GST_DEBUG_OBJECT (demux,
+         "Set dolby-vision TRUE for profileID [%d], compID [%d]",
+         demux->dv_profile, demux->dv_bl_signal_comp_id);
+diff -ruN lg-orig-1.24.0/matroska-demux.h matroska-src-1.24.0/matroska-demux.h
+--- lg-orig-1.24.0/matroska-demux.h	2026-11-25 21:15:21.216036500 +0100
++++ matroska-src-1.24.0/matroska-demux.h	2026-11-25 21:15:21.137187100 +0100
+@@ -45,6 +45,8 @@
+ 
+ /* DolbyHDR support */
+ #define DOLBYHDR_SUPPORT
++/* Convert Dolby Vision profile 7 to 8.1 on the fly (libdovi, dovi_tool mode 2) */
++#define DOLBYHDR_P7_TO_P81
+ 
+ #ifdef DOLBYHDR_SUPPORT
+ enum DolbyBoxConfiguration
+diff -ruN lg-orig-1.24.0/matroska-ids.c matroska-src-1.24.0/matroska-ids.c
+--- lg-orig-1.24.0/matroska-ids.c	2026-11-25 21:15:21.220882400 +0100
++++ matroska-src-1.24.0/matroska-ids.c	2026-11-25 21:15:21.141345500 +0100
+@@ -65,6 +65,12 @@
+   video_context->earliest_time = GST_CLOCK_TIME_NONE;
+   video_context->multiview_mode = GST_VIDEO_MULTIVIEW_MODE_NONE;
+   video_context->multiview_flags = GST_VIDEO_MULTIVIEW_FLAGS_NONE;
++  video_context->dovi_p7_to_p81 = FALSE;
++  video_context->dovi_nal_length_size = 0;
++  video_context->dovi_frames = 0;
++  video_context->dovi_rpu_converted = 0;
++  video_context->dovi_rpu_failed = 0;
++  video_context->dovi_el_dropped = 0;
+   video_context->alpha_mode = FALSE;
+   video_context->colorimetry.range = GST_VIDEO_COLOR_RANGE_UNKNOWN;
+   video_context->colorimetry.matrix = GST_VIDEO_COLOR_MATRIX_UNKNOWN;
+diff -ruN lg-orig-1.24.0/matroska-ids.h matroska-src-1.24.0/matroska-ids.h
+--- lg-orig-1.24.0/matroska-ids.h	2026-11-25 21:15:21.224513900 +0100
++++ matroska-src-1.24.0/matroska-ids.h	2026-11-25 21:15:21.146082500 +0100
+@@ -717,6 +717,14 @@
+   GstVideoContentLightLevel content_light_level;
+ 
+   gint valid_color;
++
++  /* Dolby Vision profile 7 -> 8.1 conversion (matroskademux) */
++  gboolean      dovi_p7_to_p81;
++  guint         dovi_nal_length_size;
++  guint64       dovi_frames;
++  guint64       dovi_rpu_converted;
++  guint64       dovi_rpu_failed;
++  guint64       dovi_el_dropped;
+ } GstMatroskaTrackVideoContext;
+ 
+ typedef struct _GstMatroskaTrackAudioContext {

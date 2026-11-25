@@ -239,6 +239,10 @@ cmd_status() {
   om=$(orig_md5)
   set -- $(select_variant "$om"); variant=$1; verified=$2; known=$3; rec=$4
   [ "$variant" = "-" ] && variant=""
+  # 4th variants.tab column "p7only": LG's own demuxer already does Dolby Vision on
+  # this webOS (webOS 25+); our build only adds the profile 7 -> 8.1 conversion
+  native=false
+  [ -n "$variant" ] && awk -v v="$variant" '$1==v && $4=="p7only"{f=1} END{exit !f}' "$(vartab)" 2>/dev/null && native=true
   so=$(plugin_path "$variant")
   bundled=$( [ -n "$so" ] && md5_of "$so")
   installed=$(cat "$DIR/libgstmatroska.so.md5" 2>/dev/null)
@@ -254,7 +258,7 @@ cmd_status() {
 \"installed\":$(tf [ -f "$DIR/libgstmatroska.so" ]),\"linked\":$(tf [ -L "$LINK" ]),\
 \"disabledFlag\":$(tf [ -f "$DIR/disable" ]),\"active\":$(tf mounted),\"inUse\":$(tf in_use),\
 \"autostartAvailable\":$(tf autostart_possible),\"experimental\":$exp,\"verified\":$([ "$verified" = true ] && echo true || echo false),\"variant\":\"$(js "$variant")\",\
-\"p7\":$(tf [ ! -f "$DIR/disable-p7" ]),\"original\":\"$(js "$om")\",\"originalKnown\":\"$(js "$known")\",\
+\"p7\":$(tf [ ! -f "$DIR/disable-p7" ]),\"nativeDv\":$native,\"original\":\"$(js "$om")\",\"originalKnown\":\"$(js "$known")\",\
 \"bundledMd5\":\"$(js "$bundled")\",\"installedMd5\":\"$(js "$installed")\",\"runningMd5\":\"$(js "$running")\",\"updateAvailable\":$update,\
 \"webosRelease\":\"$(js "$rel")\",\"gstreamer\":\"$(js "$gst")\",\"autostartLog\":\"$(js "$(cat "$LOG" 2>/dev/null)")\"}"
 }

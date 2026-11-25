@@ -25,7 +25,8 @@ SDK=${STARFISH_SDK:-$HOME/tc/starfish}
 
 # cross compiler (for the tiny dlopen checker) + objdump
 # shellcheck disable=SC1090
-[ -z "${CC:-}" ] && . "$SDK"/environment-setup-* 2>/dev/null
+# (the SDK's setup script uses unset variables, so source it with set -u off)
+if [ -z "${CC:-}" ]; then set +u; . "$SDK"/environment-setup-* >/dev/null 2>&1; set -u; fi
 QEMU=${QEMU_ARM:-$(command -v qemu-arm || echo "$SDK"/sysroots/x86_64-starfishsdk-linux/usr/bin/qemu-arm)}
 [ -x "$QEMU" ] || { echo "qemu-arm not found (set QEMU_ARM)"; exit 3; }
 
